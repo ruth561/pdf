@@ -4,14 +4,79 @@ from typing import Tuple, Dict
 # Type of PDF object's reference
 ObjRef = Tuple[int, int]
 
+Delimiters = rb"[\(\)\<\>\[\]\{\}\/\%]"
+WhiteSpaceChars = rb"[\x00\x09\x0a\x0c\x0d\x20]"
+
+def error_func(message):
+    print(f"[ ERROR ] {message}")
+    exit()
+
+
 class PdfObj:
 
     def __init__(self, raw_data: bytes):
         self.raw_data = raw_data
+        self.raw_data = b"""6 0 obj
+<< /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ] /ColorSpace << /Cs1 7 0 R
+>> /Font << /G1 8 0 R >> /XObject << /Im1 9 0 R /HELLO#20WORLD#0aSEE#73YOU>> >>
+endobj"""
+        print(Delimiters)
+        
+        print(self.raw_data)
+        self.num: int = None
+        self.gen: int = None
+        self.decode()
+        print(self.num)
+        print(self.gen)
+        print(self.raw_data)
         pass
 
     def decode(self):
-        pass
+        # object number
+        m_obj = re.search(rb"[0-9]+", self.raw_data)
+        self.raw_data = self.raw_data[m_obj.end():]
+        self.num = int(m_obj.group())
+        # generation number
+        m_obj = re.search(rb"[0-9]+", self.raw_data)
+        self.raw_data = self.raw_data[m_obj.end():]
+        self.gen = int(m_obj.group())
+
+        self.raw_data = self.raw_data[self.raw_data.find(b"obj") + 3:]
+        while True:
+            m_obj = re.search(rb"(" + Delimiters + rb"|endobj)", self.raw_data)
+            if m_obj == None:
+                error_func("obj syntax error")
+
+            self.raw_data = self.raw_data[m_obj.end():]
+            print(m_obj.group())
+            if m_obj.group() == b"endobj":
+                break
+            # elif m_obj.group() == b"<":
+
+            elif m_obj.group() == b"/": # name object
+                cnt, name = self.name_decode(self.raw_data)
+                print("name:  ", name)
+                self.raw_data = self.raw_data[cnt:]
+                
+        print("Finish decoding!!")
+
+    # This function returns the size of name and name itself.
+    def name_decode(self, data: bytes) -> Tuple[int, bytes]:
+        res = b""
+        i = 0
+        while i < len(data):
+            c = data[i:i+1]
+            if c == b"#":
+                res += bytes([int(data[i + 1: i + 3], 16)])
+                i += 3
+                continue
+            elif re.match(WhiteSpaceChars, c): # end char
+                break
+            else:
+                res += c
+                i += 1
+        return i, res
+
 
 
 class TrailerDict:
@@ -60,8 +125,8 @@ class PDF:
         print(self.trailer_dict.info)
         self.objs: Dict[ObjRef, PdfObj] = dict()
         self.xref_decode()
-        print(self.objs[self.trailer_dict.root].raw_data)
-        print(self.objs[self.trailer_dict.info].raw_data)
+        # print(self.objs[self.trailer_dict.root].raw_data)
+        # print(self.objs[self.trailer_dict.info].raw_data)
 
     def xref_decode(self):
         startxref_offset = self.raw_data.rfind(b"startxref")
@@ -77,6 +142,5 @@ class PDF:
             offset_s, gen_s, state = line.split()
             offset  = int(offset_s)
             gen     = int(gen_s)
-            obj_raw_data = re.search(rb"obj(.|\n)*?endobj", self.raw_data[offset:]).group()
-            self.objs[(idx, gen)] = PdfObj(obj_raw_data)
+            self.objs[(idx, gen)] = PdfObj(self.raw_data[offset:])
 
