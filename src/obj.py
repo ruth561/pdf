@@ -19,6 +19,7 @@ class PdfObj:
         self.raw_data = b"""6 0 obj
 << /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ] /ColorSpace << /Cs1 7 0 R
 >> /Font << /G1 8 0 R >> /XObject << /Im1 9 0 R /HELLO#20WORLD#0aSEE#73YOU>> >>
+<< >> % here is comments! fa()80{}[]
 endobj"""
         print(Delimiters)
         
@@ -52,8 +53,13 @@ endobj"""
             if m_obj.group() == b"endobj":
                 break
             # elif m_obj.group() == b"<":
+            elif m_obj.group() == b"%": # comment
+                m_obj = re.search(rb".*\n", self.raw_data)
+                print(m_obj.group()[:-1])
+                self.raw_data = self.raw_data[m_obj.end():]
 
             elif m_obj.group() == b"/": # name object
+                continue
                 cnt, name = self.name_decode(self.raw_data)
                 print("name:  ", name)
                 self.raw_data = self.raw_data[cnt:]
